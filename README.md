@@ -1,4 +1,4 @@
-# DYI Forth Interpreter
+# DIY Forth Interpreter
 in the early 80's I bought a Noth Star Computers Horizon S100 computer. The OS was CP/M. I used it to put together a two axis data collection, correction,
 and validation system for our CalComp digitizers. For the application code I started with the article "Write Your Own FORTH Interpreter", by Richard Fritzson,
 in Kilobaud Microcomputing, February 1981 page 76 - 92. I typed in and compiled th Forth interpreter as the foundation of the control software that I wrote.
