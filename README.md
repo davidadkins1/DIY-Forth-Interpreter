@@ -5,7 +5,7 @@ in Kilobaud Microcomputing, February 1981 page 76 - 92. I typed in and compiled 
 The article can be found in the public domain in the Internet Archive at:
 https://archive.org/details/kilobaudmagazine-1981-02/page/n75/mode/1up?view=theater
  
-I am "copying" all of the listings, minus the hexidecimal bytes, for re-use here. My plan is to later branch this to an #RC2014 robot project.
+I am "copying" all of the listings, minus the hexidecimal bytes, for re-use here. My plan is to later branch this to a #RC2014 robot project.
 
 To copy the listings I used the Archive to export a PDF of the magazine. I cut and paste the listing code into forth.asm, created with 
 Notepad++ (https://notepad-plus-plus.org/). This is not quite as easy as it sounds, but it seems easier then retyping it all.
