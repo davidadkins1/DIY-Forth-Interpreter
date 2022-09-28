@@ -16,7 +16,7 @@ From the CP/M command line I switch to the C0: drive and import forth.asm. To co
 generates, amoung others, a forth.prn file. I export the .prn file and keep it open in Notepad++ for update and review.
 
 About the files:
-Forth.asm replicates the code from in the article and compiles under CP/M with no errors.
+Forth.asm replicates the code, minus the hex data, in the article and compiles under CP/M with no errors.
 FORTH.PRN is the listing file genrated from "asm forth". I used it to verify that the generated code matched the article.
 ForthCPM.ASM is forth.asm modified to run under CP/M. The original may have run fine in an 8K system, but the I/O call addresses were absolute.
              I modified it and made sure it runs in my CP/M emulator. You can explore the changes by searching for ";DA". They are minor.
