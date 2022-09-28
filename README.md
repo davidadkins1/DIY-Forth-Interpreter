@@ -13,7 +13,7 @@ As I said, my goal is to run this on a #RC2014 Z80 computer, but to compile and 
 MyZ80 (http://z80.eu/myz80cpm.html) running under DOSBox (https://www.dosbox.com/). I am including my DOSBox configuration file in this repository. 
 It simply sets cycles=max, mounts a DOS C: drive, and starts MyZ80. Depending upon your system, you can just leave it running minimized until needed.
 From the CP/M command line I switch to the C0: drive and import forth.asm. To compile it I simply type "asm forth". This lists any errors and
-generate a FORTH.HEX and a FORTH.PRN file. I export the .prn file and keep it open in Notepad++ for update and review.
+generates a FORTH.HEX and a FORTH.PRN file. I export the .prn file and keep it open in Notepad++ for update and review.
 
 About the files:
 Forth.asm replicates the code, minus the hex data, in the article and compiles under CP/M with no errors.
