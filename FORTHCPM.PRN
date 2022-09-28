@@ -1,0 +1,983 @@
+
+
+                ;********************************************************************
+                ; Write Your Own FORTH Interpreter By Richard Fritzson
+                ; Kilobaud Microcomputing, February 1981 page 76 - 92
+                ; Found in the public domain in the Internet Archive at:
+                ; https://bit.ly/3R6KSyh
+                ;********************************************************************
+                ;DA******************************************************************
+                ; CP/M DEFINITIONS
+                ;********************************************************************
+ 0006 =         FBASE	EQU	6	;Points to CP/M top of memory
+ 0005 =         BDOS	EQU	5	;BDOS Entry Point
+ 0001 =         CONIN	EQU	1	;Console Input Function
+ 0002 =         CONOUT	EQU	2	;Console Output Function
+                
+                
+                ;********************************************************************
+                ; Listing 14. Main interpreter loop. Page 88
+                ;********************************************************************
+                ;DA	TITLE 'Threaded Code Interpreter for 8080'
+                ; Richard Fritzson
+                ; 29 January 1980 Version 1.0
+                ;
+                ; This version contains only the basic internal
+                ; interpreter and a simple interactive console
+                ; interpreter
+                
+ 0100           	ORG	100H		;start up address
+ 0100 2A0600    ENTRY	LHLD	FBASE		;DA Read top of CP/M memory
+ 0103 2B        	DCX	H		;point to free space
+ 0104 225103    	SHLD	MEMORY+2	;Update memory size
+ 0107 31A401    	LXI	SP,STACK	;initialize parameter stack
+ 010A CDBC06    	CALL	DICMOVE		;move dictionary to high memory
+ 010D 211501    	LXI	H,TOP-1		;set PC to top level loop
+ 0110 22A401    	SHLD	PC
+ 0113 C33E02    	JMP	NEXT		;and start interpreter
+                
+                ; TOP - Top Level System Loop
+                ; DESCRIPTION: TOP is an infinite
+                ; loop which picks up the contents of the
+                ; EXEC variable and executes it.
+                
+ 0116 2001B202  TOP	DW	EXEC,PEEKW	;get top level program
+ 011A F503      	DW	EXECUTE		;run it
+ 011C FC021501  	DW	JUMP, TOP-1	;and loop
+                
+                ; EXEC - address of top level routine
+                
+ 0120 5303      EXEC	DW	VARIABLE	;threaded code variable
+ 0122 5803      	DW	INTERACT	;address of user interpreter
+                
+                ; Reserved Stack Space
+                
+ 0124           	DS	128		;parameter stack
+ 01A4 =         STACK	EQU	$
+                	PAGE
+                
+                ;********************************************************************
+                ; Listing la. Example assemblyanguage routine. Page 76
+                ;********************************************************************
+                ; RDSEC - read a sector from the disk
+                ; HL - track to read
+                ; DE - sector to read
+                ; BC - memory area to read to
+                
+                ;RDSEC	PUSH	B	; save memory address
+                ;	PUSH	D	; save sector
+                ;	MOV	B,H	; all subs expect arg in BC
+                ;	MOV	C,L
+                ;	CALL	SETTRK	; set track
+                ;	POP	B	; BC gets sector
+                ;	CALL	SETSEC	; select sector
+                ;	POP	B	; BC gets memory address
+                ;	CALL	SETDMA	; set memory address
+                ;	CALL	READ	; READ the sector
+                ;	RET
+                
+                ;********************************************************************
+                ; Listing lb. Example use of uniform parameter passing on the stack.
+                ; Page 76
+                ;********************************************************************
+                ; RDSEC - read a sector from the disk
+                ; TOP (of stack) - track to read
+                ; TOP-1		 - sector to read
+                ; TOP-2		 - memory address to read to
+                ; NOTE: This routine won't work because it uses the
+                ; same stack for subroutine calling and parameter
+                ; passing. It is here only to make a point.
+                ;RDSEC	CALL	SETTRK	; SETTRK uses up top of stac
+                ;	CALL	SETSEC	; SETSEC uses up top of stack
+                ;	CALL	SETDMA	; SETDMA uses up top of stack
+                ;	CALL	READ	; all arguments set, perform read
+                ;	RET
+                
+                ;********************************************************************
+                ; Listing lc. Sample assembly code compressed into threaded code.
+                ;********************************************************************
+                ; RDSEC - read a sector from the disk
+                ; TOP (of stack) - track to read
+                ; TOP-1		 - sector to read
+                ; TOP-2		 - memory area to read to
+                ; NOTE: This is a threaded code routine. It uses two
+                ; separate stacks and so will work.
+                
+                ;RDSEC	DW	TCALL	; threaded code CALL
+                ;	DW	SETTRK	; TCALL SETTRK, set track
+                ;	DW	SETSEC	; TCALL SETSEC, set sector
+                ;	DW	SETDMA	; TCALL SETDMA, set memory address
+                ;	DW	READ	; TCALL READ, read sector
+                ;	DW	TRET	; threaded code RETurn
+                
+                ;********************************************************************
+                ; Listing 2. Sample code showing stack details. Page 77
+                ;********************************************************************
+                
+                ; The interpreter's architecture: a program counter and a stack
+ 01A4 0000      PC	DW	0	; a 16 bit pointer into the MIDDLE off
+                			; the current instruction (not the
+                			; first byte, but the second)
+                
+ 01A6 A801      RSTACK	DW	$+2	; the stack pointer points to the next
+                			; AVAILABLE stack position (not the
+                			; topmost occupied position)
+                
+ 01A8           	DS	80H	; reserved stack space
+                
+                ; RPUSH - push DE on stack
+                ; ENTRY: DE - number to be pushed on stack
+                ; EXIT: DE - is unchanged
+                ; DESCRIPTION: this code is illustrative of how the
+                ; stack works. However it is not used in the system and
+                ; can be left out.
+                
+ 0228 2AA601    RPUSH	LHLD	RSTACK	; get stack pointer
+ 022B 73        	MOV	M,E	; store low byte
+ 022C 23        	INX	H	; bump pointer to next byte
+ 022D 72        	MOV	M,D	; store high byte
+ 022E 23        	INX	H	; bump pointer to next empty slot
+ 022F 22A601    	SHLD	RSTACK	; restore pointer
+ 0232 C9        	RET
+                
+                ; RPOP - pop DE from stack
+                ; ENTRY: No Register Values Expected
+                ; EXIT: DE - top element of RSTACK
+                ; DESCRIPTION: this code is illustrative of how the
+                ; stack works. However it is not used in the system and
+                ; can be left out.
+                
+ 0233 2AA601    RPOP	LHLD	RSTACK	; get stack pointer
+ 0236 2B        	DCX	H	; rop to first stack position
+ 0237 56        	MOV	D,M	; get high byte
+ 0238 2B        	DCX	H
+ 0239 5E        	MOV	E,M	; get low byte
+ 023A 22A601    	SHLD	RSTACK	; restore stack pointer
+ 023D C9        	RET
+                
+                ;********************************************************************
+                ; Listing 3. Main interpreter loop. Page 78
+                ;********************************************************************
+                
+                ; NEXT - main internal interpreter loop
+                ; ENTRY: PC - points into v instruction just completed
+                ; EXIT:  PC - incremented by 2, points to next
+                ;	      instruction
+                ;	 DE - points to middle of first word of
+                ;	      next routine (i.e. (PC)+1)
+                ; DESCRIPTION : increments the PC; picks up the code
+                ; word of the next routine and jumps to it.
+                
+ 023E 2AA401    NEXT	LHLD	PC	;increment program counter
+ 0241 23        	INX	H	;while loading DE with
+ 0242 5E        	MOV	E,M	;next instruction
+ 0243 23        	INX	H
+ 0244 56        	MOV	D,M
+ 0245 22A401    	SHLD	PC
+ 0248 EB        	XCHG 		;pick up word addressed
+ 0249 5E        	MOV	E,M	;by next instruction (which
+ 024A 23        	INX	H	;is CODE, TCALL or some other
+ 024B 56        	MOV	D,M	;executable address)
+ 024C EB        	XCHG		;  and
+ 024D E9        	PCHL		;jump to it
+                
+                ;********************************************************************
+                ; Listing 4a. TCALL instruction. Page 78
+                ;********************************************************************
+                ; TCALL - the threaded call routine
+                ; ENTRY: DE - middle of first word of routine being called
+                ; EXIT: No Register Values Returned
+                ; DESCRIPTION: pushes the current contents of the PC
+                ; onto the return stack; makes DE the new PC.
+                
+ 024E 2AA401    TCALL	LHLD	PC	;get old program counter
+ 0251 EB        	XCHG		;replace with DE
+ 0252 22A401    	SHLD	PC
+ 0255 2AA601    	LHLD	RSTACK	;push old PC on RSTACK
+ 0258 73        	MOV	M,E
+ 0259 23        	INX 	H
+ 025A 72        	MOV	M,D
+ 025B 23        	INX 	H
+ 025C 22A601    	SHLD	RSTACK
+ 025F C33E02    	JMP	NEXT	;back to interpreter
+                
+                ;********************************************************************
+                ; Listing 4b. TRET instruction. Page 78
+                ;********************************************************************
+                ; TRET - the threaded code return
+                ; DESCRIPTION: pops the top element of the
+                ; return stack and puts it into the program counter.
+                
+ 0262 6402      TRET	DW	$+2	;CODE
+ 0264 2AA601    	LHLD	RSTACK	;get stack poiner
+ 0267 2B        	DCX	H	;high byte of top element
+ 0268 56        	MOV	D,M
+ 0269 2B        	DCX	H	;low byte of top element
+ 026A 5E        	MOV	E,M
+ 026B 22A601    	SHLD	RSTACK	;restore stack pointer
+ 026E EB        	XCHG		;store top of stack in PC
+ 026F 22A401    	SHLD	PC
+ 0272 C33E02    	JMP	NEXT	;back to interpreter
+                
+                ;********************************************************************
+                ; Listing 5. Simple arithmetic routines. Page 80
+                ;********************************************************************
+                ; Simple arithmetic routines
+                ; INC - increment the top of the stack
+                
+ 0275 7702      INC	DW	$+2	;CODE
+ 0277 E1        	POP	H	;get top
+ 0278 23        	INX 	H	;increment
+ 0279 E5        	PUSH	H	;restore
+ 027A C33E02    	JMP	NEXT
+                	
+                ; DEC - decrement the top of the stack
+ 027D 7F02      DEC	DW	$+2	;CODE
+ 027F E1        	POP	H	;get top
+ 0280 2B        	DCX	H	;decrement
+ 0281 E5        	PUSH	H	;restore
+ 0282 C33E02    	JMP	NEXT
+                
+                ; TADD - add the top two elements of the stack
+ 0285 8702      TADD	DW	$+2	;CODE
+ 0287 E1        	POP	H	;first element
+ 0288 D1        	POP	D	;second element
+ 0289 19        	DAD	D	;add 'em
+ 028A E5        	PUSH	H	;push result
+ 028B C33E02    	JMP	NEXT
+                	
+                ; MINUS - negate top of stack
+ 028E 9002      MINUS	DW	$+2	;CODE
+ 0290 E1        	POP	H	;get top
+ 0291 CD9802    	CALL	MINUSH	;negate H
+ 0294 E5        	PUSH	H	;push it
+ 0295 C33E02    	JMP	NEXT
+                
+ 0298 2B        MINUSH	DCX	H	;good ole 2s co
+ 0299 7C        	MOV	A,H
+ 029A 2F        	CMA
+ 029B 67        	MOV	H,A
+ 029C 7D        	MOV	A,L
+ 029D 2F        	CMA
+ 029E 6F        	MOV	L,A
+ 029F C9        	RET
+                
+                ; TSUB - subtract TOP from TOP-1
+ 02A0 4E02      TSUB	DW	TCALL	;threaded code
+ 02A2 8E02      	DW	MINUS	;negate top
+ 02A4 8502      	DW	TADD	;and add
+ 02A6 6202      	DW	TRET
+                
+                ;********************************************************************
+                ; Listing 6. Peek and Poke instructions. Page 80
+                ;********************************************************************
+                ; PeekB - retrieve a byte from memory
+                ; ENTRY: TOP   - address
+                ; EXIT:  TOP   - byte at address
+                
+ 02A8 AA02      PEEKB	DW	$+2	;CODE
+ 02AA E1        	POP	H	;get address
+ 02AB 5E        	MOV	E,M	;get byte
+ 02AC 1600      	MVI	D,0
+ 02AE D5        	PUSH	D	;save
+ 02AF C33E02    	JMP	NEXT
+                
+                ; PeekW - retrieve a word from memory
+                ; ENTRY: TOP   - address
+                ; EXIT:  TOP   - word at address
+                
+ 02B2 B402      PEEKW	DW	$+2	;CODE
+ 02B4 E1        	POP	H	;get address
+ 02B5 5E        	MOV	E,M	;get word
+ 02B6 23        	INX	H
+ 02B7 56        	MOV	D,M
+ 02B8 D5        	PUSH	D	;save
+ 02B9 C33E02    	JMP	NEXT
+                
+                ; PokeB - store byte in memory
+                ; ENTRY: TOP   - address
+                ;	 TOP-1 - byte to store
+                ; EXIT:  No Values Returned
+                
+ 02BC BE02      POKEB	DW	$+2	;CODE
+ 02BE E1        	POP	H	;get address
+ 02BF D1        	POP	D	;get byte
+ 02C0 73        	MOV	M,E	;store
+ 02C1 C33E02    	JMP	NEXT
+                	
+                ; PokeW - store word in memory
+                ; ENTRY: TOP   - address
+                ;	 TOP-1 - word to store
+                ; EXIT:  No Values returned
+                
+ 02C4 C602      POKEW	DW	$+2	;CODE
+ 02C6 E1        	POP	H	;get address
+ 02C7 D1        	POP	D	;get word
+ 02C8 73        	MOV	M,E	;store word
+ 02C9 23        	INX	H
+ 02CA 72        	MOV	M,D
+ 02CB C33E02    	JMP	NEXT
+                
+                ;********************************************************************
+                ; Listing 7. Standard threaded-code functions. Page 81
+                ;********************************************************************
+                ; Some standard threaded code functions
+                ; TPUSH - push the next word onto the stack
+                
+ 02CE D002      TPUSH	DW	$+2	;CODE
+ 02D0 2AA401    	LHLD	PC	;get program counter
+ 02D3 23        	INX	H	;advance to next word
+ 02D4 5E        	MOV	E,M	;and pick up contents
+ 02D5 23        	INX	H
+ 02D6 56        	MOV	D,M
+ 02D7 22A401    	SHLD	PC	;store new program counter
+ 02DA D5        	PUSH	D	;push word onto param stack
+ 02DB C33E02    	JMP	NEXT	;continue
+                
+                ; TPOP - drop the top of the parameter stack
+ 02DE E002      TPOP	DW	$+2	;CODE
+ 02E0 E1        	POP	H	;pop one element
+ 02E1 C33E02    	JMP	NEXT	;and continue
+                
+                ; SWAP - exchange top two elements of the stack
+ 02E4 E602      SWAP	DW	$+2	;CODE
+ 02E6 E1        	POP	H	;get one element
+ 02E7 E3        	XTHL		;exchange
+ 02E8 E5        	PUSH	H	;put back
+ 02E9 C33E02    	JMP	NEXT	;and continue
+                
+                ; DUP - duplicate the top of the stack
+                ; DESCRIPTION: often used before functions which
+                ; consume the top of the stack (e.g. conditional jumps)
+                
+ 02EC EE02      DUP	DW	$+2	;CODE
+ 02EE E1        	POP	H	;get top
+ 02EF E5        	PUSH	H 	;save it twice
+ 02F0 E5        	PUSH	H
+ 02F1 C33E02    	JMP 	NEXT
+                		
+                ; CLEAR - clear the stack
+                
+ 02F4 F602      CLEAR	DW	$+2	;CODE
+ 02F6 31A401    	LXI	SP,STACK ; reset stack pointer
+ 02F9 C33E02    	JMP	NEXT
+                
+                ;********************************************************************
+                ; Listing 8. Threaded-code jumps. Page 81
+                ;********************************************************************
+                ; Threaded Code Jumps
+                
+                ; All Jumps are to absolute locations
+                ; All Conditional jumps consume the
+                ; elements of the stack that they test.
+                
+ 02FC FE02      JUMP	DW	$+2	;CODE
+ 02FE 2AA401    JUMP1	LHLD	PC	;get program counter
+ 0301 23        	INX	H	;get next word
+ 0302 5E        	MOV	E,M
+ 0303 23        	INX	H
+ 0304 56        	MOV	D,M
+ 0305 EB        	XCHG		;make it the PC
+ 0306 22A401    	SHLD	PC
+ 0309 C33E02    	JMP	NEXT
+                
+                ; IFZ - jump if top is zero
+                
+ 030C 0E03      IFZ	DW	$+2	;CODE
+ 030E E1        	POP	H	;get top
+ 030F 7C        	MOV	A,H	;test for zero
+ 0310 B5        	ORA	L
+ 0311 CAFE02    	JZ	JUMP1	;if yes, jump
+ 0314 2AA401    SKIP	LHLD	PC	;else simply skip next word
+ 0317 23        	INX	H
+ 0318 23        	INX	H
+ 0319 22A401    	SHLD	PC
+ 031C C33E02    	JMP	NEXT
+                
+                ; IFNZ - jump if top not zero
+                
+ 031F 2103      IFNZ	DW	$+2 	;CODE
+ 0321 E1        	POP	H	;get top
+ 0322 7C        	MOV	A,H	;test for zero
+ 0323 B5        	ORA	L
+ 0324 C2FE02    	JNZ	JUMP1	;if not, jump
+ 0327 C31403    	JMP	SKIP	;else don't
+                
+                ; IFEQ - jump if TOP =» TOP-1
+                
+ 032A 2C03      IFEQ	DW	$+2	;CODE
+ 032C E1        	POP	H	;get top
+ 032D CD9802    	CALL	MINUSH	;negate it
+ 0330 D1        	POP	D	;get top-1
+ 0331 19        	DAD	D	;add 'em
+ 0332 7C        	MOV	A,H	;test for zero
+ 0333 B5        	ORA	L
+ 0334 CAFE02    	JZ	JUMP1	;if equal, jump
+ 0337 C31403    	JMP	SKIP	;otherwise, don't
+                
+                ;********************************************************************
+                ; Listing 9. Implementing constants and variables. Page 82
+                ;********************************************************************
+                ; Implementation of Constants and Variables in a
+                ; threaded code system
+                
+                ; CONSTANT - code address for constants
+                ; ENTRY: DE - points to middle of code word for
+                ;	      constant
+                ; DESCRIPTION: picks up the contents of the word
+                ; following the code word and pushes it onto the stack.
+                
+                CONSTANT
+ 033A EB        	XCHG		;HL <- address of code word
+ 033B 23        	INX	H	;get constant
+ 033C 5E        	MOV	E,M
+ 033D 23        	INX	H
+ 033E 56        	MOV	D,M
+ 033F D5        	PUSH	D	;push it on the parameter stack
+ 0340 C33E02    	JMP	NEXT	;return to interpreter	
+                
+                ; Some common constants
+                
+ 0343 3A03      ZERO	DW	CONSTANT	;threaded code constant
+ 0345 0000      	DW	0
+                	
+ 0347 3A03      ONE	DW	CONSTANT	;threaded code constant
+ 0349 0100      	DW	1
+                	
+ 034B 3A03      NEGONE	DW	CONSTANT	;threaded code constant
+ 034D FFFF      	DW	-1
+                	
+ 034F 3A03      MEMORY	DW	CONSTANT	;last available byte
+ 0351 FF1F      	DW	8*1024-1	;8K system
+                
+                ; VARIABLE - code address for variables
+                ; ENTRY: DE - points to middle of code word for
+                ;	      variable
+                ; DESCRIPTION: pushes address of word following code
+                ; word onto the stack.
+                
+                VARIABLE
+ 0353 13        	INX	D	;increment to variable address
+ 0354 D5        	PUSH	D	;store on parameter stack
+ 0355 C33E02    	JMP	NEXT	;return to inerpreter
+                
+                ;********************************************************************
+                ; Listing 10. Interaction algorithm in threaded language. Page 84
+                ;********************************************************************
+                ; Top Level External Interpreter Version 1.0
+                ;
+                ; This routine reads one line of reverse
+                ; polish notation from the console and executes it.
+                INTERACT
+ 0358 4E02      	DW	TCALL		;threaded code
+ 035A BC04      	DW	PROMPT		;prompt the user and
+ 035C FD03      	DW	READLINE	;read a console line
+                
+ 035E 0E05      SLOOP	DW	SCAN		;scan for next word
+ 0360 0C037F03  	DW	IFZ,EXIT-1	;if end of line, quit
+ 0364 9603      	DW	LOOKUP		;else lookup word in dictionar'
+ 0366 0C036F03  	DW	IFZ, NUMBER-1	;if not found, try number
+ 036A F503      	DW	EXECUTE		;else execute it
+ 036C FC025D03  	DW	JUMP,SLOOP-1 	;and continue scanning
+                	
+ 0370 AF05      NUMBER	DW	CONAXB		;try converting to number
+ 0372 1F035D03  	DW	IFNZ,SLOOP-1	;if succesful, leave on stack
+                				;and continue scanning
+                
+ 0376 CE028803  	DW	TPUSH,ERRMSG	;else push error message
+ 037A CA04      	DW	PRINTS		;and print it
+ 037C CA04      	DW	PRINTS		;then print string
+ 037E 6202      	DW	TRET		;and return
+                	
+ 0380 EC025B05  EXIT	DW	DUP,CONBXA	;copy and convert top of stack
+ 0384 CA04      	DW	PRINTS		;print it
+ 0386 6202      	DW	TRET		;return
+ 0388 0D4E6F7420ERRMSG	DB	13,'Not Defined: '
+                
+                ;********************************************************************
+                ; Listing 11. Dictionary lookup routine. Page 84 and 85
+                ;********************************************************************
+                ; LOOKUP - the dictionary lookup routine
+                ; ENTRY: TOP   - pointer to string to be looked up
+                ; EXIT:  TOP   - -1 if string found in dictionary
+                ;	          0 if string not found
+                ;	 TOP-1 - pointer to code of found subroutine
+                ;			or
+                ;		 string pointer if not found
+                ; DESCRIPTION: performs a linear search of the
+                ; dictionary. Returns the code address if the string
+                ; is found, or else the string pointer if not found.
+                ; threaded code
+                
+ 0396 4E02      LOOKUP	DW	TCALL		;threaded code
+ 0398 CC03B202  	DW	NAMES,PEEKW	;get top of dictionary
+                
+ 039C EC02A802  SEARCH	DW	DUP,PEEKB	;get char count of next entry
+ 03A0 0C03B703  	DW	IFZ,FAIL-1	;if end of dictionary
+                
+ 03A4 D003      	DW	MATCH		;else attempt a match
+ 03A6 1F03BD03  	DW	IFNZ,SUCCEED-1	;if succesful match
+                
+ 03AA E8048502  	DW	FIRST,TADD	;else skip string
+ 03AE CE02020085	DW	TPUSH,2,TADD	;and pointer
+ 03B4 FC029B03  	DW	JUMP,SEARCH-1	;and try next entry
+                
+ 03B8 DE02      FAIL	DW	TPOP		;drop dictionary pointer
+ 03BA 4303      	DW	ZERO		;leave a zero on the stack
+ 03BC 6202      	DW	TRET		;and quit
+                	
+ 03BE E402DE02  SUCCEED	DW	SWAP,TPOP	;drop string pointer
+ 03C2 E8048502B2	DW	FIRST,TADD,PEEKW ;get code pointer
+ 03C8 4B03      	DW	NEGONE		;push a minus one
+ 03CA 6202      	DW	TRET		;and return
+                
+                ; Names - address of dictionary names
+                
+ 03CC 5303      NAMES	DW	VARIABLE	;threaded code variable
+ 03CE 2106      	DW	NAMEBEG		;beginning of names
+                	
+                ; MATCH - match strings
+                ; ENTRY: TOP   - ptr to string
+                ;	 TOP-1 - ptr to another string
+                ; EXIT:  TOP   - -1 if strings are the same
+                ;		  0 if strings do not match
+                ;	 TOP-1 - ptr to first string
+                ;	 TOP-2 - ptr to second string
+                ; DESCRIPTION: written in assembly to speed things up.
+                
+ 03D0 D203      MATCH	DW	$+2	;C0DE
+ 03D2 E1        	POP	H	;first string
+ 03D3 D1        	POP	D	;second string
+ 03D4 D5        	PUSH	D	;leave on stack
+ 03D5 E5        	PUSH	H
+ 03D6 1A        	LDAX	D	;get 2nd count
+ 03D7 BE        	CMP	M	;compare with first
+ 03D8 C2EE03    	JNZ	MATCHF	;if no match
+                			;else try string matching
+ 03DB 47        	MOV	B, A	;B holds byte count
+ 03DC 23        MATCH1	INX	H	;next byte
+ 03DD 13        	INX	D
+ 03DE 1A        	LDAX	D
+ 03DF BE        	CMP	M
+ 03E0 C2EE03    	JNZ	MATCHF	;if no match
+ 03E3 05        	DCR	B	;else dec count
+ 03E4 C2DC03    	JNZ	MATCH1	;if more to compare
+ 03E7 21FFFF    	LXI	H,-1	;else push success
+ 03EA E5        	PUSH	H
+ 03EB C33E02    	JMP	NEXT
+                
+ 03EE 210000    MATCHF	LXI	H,0	;failure
+ 03F1 E5        	PUSH	H
+ 03F2 C33E02    	JMP	NEXT
+                
+                ;********************************************************************
+                ; Listing 12. Execute function. Page 86
+                ;********************************************************************
+                ; EXECUTE - execute routine at top of stack
+                ; ENTRY: TOP   - address of routine to be executed
+                ; EXIT:  DE - middle of word addressed by top
+                ; DESCRIPTION: The address is of a threaded code
+                ; interpreter routine, so the contents of the
+                ; first word is an executable address. EXECUTE
+                ; gets that address and jumps to it, leaving DE
+                ; in the same state that the main interpreter
+                ; loop (NEXT) would have.
+                
+ 03F5 F703      EXECUTE	DW	$+2		;CODE
+ 03F7 E1        	POP	H		;get address
+ 03F8 5E        	MOV	E,M		;get first word
+ 03F9 23        	INX	H
+ 03FA 56        	MOV	D,M
+ 03FB EB        	XCHG			;and jump to it
+ 03FC E9        	PCHL
+                
+                ;********************************************************************
+                ; Listing 13. Readline program. Page 86 and 88
+                ;********************************************************************
+                ; READLINE - fill console buffer
+                ; DESCRIPTION: reads characters from the console, echoing them
+                ; to the screen and storing them in the console buffer,
+                ; beginning in the third character of the buffer.
+                ; Stops on encountering a carriage return and stores a
+                ; final zero after the other characters.
+                ; Takes appropriate action for a backspace character.
+                
+                READLINE
+ 03FD 4E02      	DW	TCALL		;threaded code
+ 03FF 4303      	DW	ZERO		;mark buffer as unscanned
+ 0401 5504BC02  	DW	CONBUF,POKEB
+                
+ 0405 5504750275	DW	CONBUF,INC,INC	;push first byte of buffer
+                
+ 040B EC02      RLOOP	DW	DUP		;duplicate buffer pointer
+ 040D 0005      	DW	CIN		;get character
+                ;DA	DW	DUP,COUT	;echo to screen
+                
+ 040F EC02CE0208	DW	DUP,TPUSH,08H	;compare with backspace
+ 0415 2A032C04  	DW	IFEQ,BKSP-1
+                
+ 0419 EC02CE020D	DW	DUP,TPUSH,0DH	;compare with carriage return
+ 041F 2A034204  	DW	IFEQ,EOL-1
+                
+ 0423 E402BC02  	DW	SWAP,POKEB	;if neither, store in buffer
+ 0427 7502      	DW	INC		;increment buffer pointer
+ 0429 FC020A04  	DW	JUMP,RLOOP-1	;and keep reading
+                	
+ 042D DE02DE02  BKSP	DW	TPOP,TPOP	;drop BS and buffer ptr copy
+ 0431 7D02      	DW	DEC		;backup pointer
+ 0433 CE022000F4	DW	TPUSH,20H,COUT	;print a space
+ 0439 CE020800F4	DW	TPUSH,08H,COUT	;and another backspace
+ 043F FC020A04  	DW	JUMP,RLOOP-1
+                	
+ 0443 DE02DE02  EOL	DW	TPOP,TPOP	;drop CR and buffer ptr copy
+ 0447 4303E402BC	DW	ZERO,SWAP,POKEB	;store final zero
+ 044D CE020A00F4	DW	TPUSH,0AH,COUT	;print a line feed
+ 0453 6202      	DW	TRET		;and return
+                
+                
+                ; Console Buffer
+                ; DESCRIPTION: First byte contains the scan pointer which
+                ; points to the next byte to be scanned. The remaining bytes
+                ; contain characters read from the console.
+                
+ 0455 5303      CONBUF	DW	VARIABLE	;threaded code variable
+ 0457           	DS	101D		;long enough for most screens
+                ; PROMPT - prompt the user
+                ; DESCRIPTION: clears to a new line and prints a hyphen
+ 04BC 4E02      PROMPT	DW	TCALL		;threaded code
+ 04BE CE02C604  	DW	TPUSH,PRMSG	;push prompt message
+ 04C2 CA04      	DW	PRINTS		;and print it
+ 04C4 6202      	DW	TRET
+                	
+ 04C6 030D0A2D  PRMSG	DB	3,0DH,0AH,'-'
+                
+                ; PRINTS - prints string
+                ; ENTRY : TOP - points to string
+                ; DECRIPTION: Uses first byte of string as a character count.
+                
+ 04CA 4E02      PRINTS	DW	TCALL		;threaded code
+ 04CC E804      	DW	FIRST		;get count
+ 04CE EC020C03E1PRINTS1	DW	DUP,IFZ,PRINTX-1 ;if done return
+ 04D4 E402E804  	DW	SWAP,FIRST	;else get next character
+ 04D8 F404      	DW	COUT		;print it
+ 04DA E4027D02  	DW	SWAP,DEC	;decrement count
+ 04DE FC02CD04  	DW	JUMP,PRINTS1-1	;and keep looping
+                
+ 04E2 DE02DE02  PRINTX	DW	TPOP,TPOP	;drop count and pointer
+ 04E6 6202      	DW	TRET		;then return
+                	
+                ; FIRST - get next byte of string on stack
+                ; ENTRY: TOP   - ptr to string
+                ; EXIT:  TOP   - first character of string
+                ;	 TOP-1 - ptr to rest of string
+                ; DESCRIPTION: useful for advancing through strings a byte
+                ; at a time.
+                
+ 04E8 EA04      FIRST	DW	$+2	;C0DE
+ 04EA E1        	POP	H	;get pointer
+ 04EB 4E        	MOV	C,M	;BC <- character
+ 04EC 0600      	MVI	B,0
+ 04EE 23        	INX	H	;bump pointer
+ 04EF E5        	PUSH	H	;restore pointer
+ 04F0 C5        	PUSH	B	;add character
+ 04F1 C33E02    	JMP	NEXT	;continue
+                	
+                ; ENTRY: TOP - character to print
+                ; DESCRIPTION: uses operating system to print character
+                
+ 04F4 F604      COUT	DW	$+2	;C0DE
+ 04F6 C1        	POP	B	;C <- character
+ 04F7 59        	MOV	E,C	;E <- character
+ 04F8 0E02      	MVI	C,CONOUT
+ 04FA CD0500    	CALL	BDOS	;print it
+ 04FD C33E02    	JMP	NEXT	;return
+                
+                ; CIN - character input routine
+                ; EXIT: TOP - character read from console
+                ; DESCRIPTION: Uses operating system
+                
+ 0500 0205      CIN	DW	$+2	;CODE
+ 0502 0E01      	MVI	C,CONIN
+ 0504 CD0500    	CALL	BDOS	;print it
+ 0507 6F        	MOV	L,A	;HL <- character
+ 0508 2600      	MVI	H,0
+ 050A E5        	PUSH	H	;push on stack
+ 050B C33E02    	JMP	NEXT	;return
+                
+                ;********************************************************************
+                ; Listing 15. Page 89, 90, and 92
+                ;********************************************************************
+                ; SCAN - Scan for next word
+                ; ENTRY: No Values Expected
+                ; EXIT:  TOP   - -1 if word found, 0 if word not found
+                ;	 TOP-1 - ptr to word if found (else nothing)
+                ; DESCRIPTION: first byte of buffer contains a counter of
+                ; characters already scanned. The next word is moved to the
+                ; beginning of the line with a leading byte count.
+                
+ 050E 1005      SCAN	DW	$+2		;CODE
+ 0510 215704    	LXI	H,CONBUF+2	;BC <- character co
+ 0513 4E        	MOV	C,M
+ 0514 0600      	MVI	B,0
+ 0516 34        	INR	M		;test for end of line already
+ 0517 CA4F05    	JZ	SCANX		;if yes
+ 051A 23        	INX	H		;HL <- scanning start point
+ 051B 09        	DAD	B
+ 051C 41        	MOV	B,C		;B <- character count
+ 051D 23        SCAN1	INX	H		;increment pointer
+ 051E 04        	INR	B		;increment count
+ 051F 7E        	MOV	A,M		;get next character
+ 0520 B7        	ORA	A		;test for end of line
+ 0521 CA4F05    	JZ	SCANX		;if yes,
+ 0524 FE20      	CPI	20H		;else, check for blank
+ 0526 CA1D05    	JZ	SCAN1		;if yes, skip it
+                
+ 0529 115804    	LXI	D,CONBUF+3	;else begin moving word
+ 052C 0E00      	MVI	C,0		;C <- size of string
+ 052E 13        SCAN2	INX	D
+ 052F 12        	STAX	D
+ 0530 0C        	INR	C		;inc word size
+ 0531 04        	INR	B		;inc scanned char count
+ 0532 23        	INX	H		;get next byte
+ 0533 7E        	MOV	A,M
+ 0534 B7        	ORA	A		;test for end of line
+ 0535 C23C05    	JNZ	SCAN3		;if not,
+                	;MVI	B,-1		;else set eol flag
+ 0538 06FF      	MVI	B,0FFH		;DA else set eol flag
+ 053A 3E20      	MVI	A,20H		;and change EOL to delimiter
+ 053C FE20      SCAN3	CPI	20H		;check for space
+ 053E C22E05    	JNZ	SCAN2		;if not yet
+                
+ 0541 215704    	LXI	H,CONBUF+2	;else save scanned char count
+ 0544 70        	MOV	M,B
+ 0545 23        	INX	H		;and word size
+ 0546 71        	MOV	M,C
+ 0547 E5        	PUSH	H		;and return word pointer
+ 0548 21FFFF    	LXI	H,-1
+ 054B E5        	PUSH	H
+ 054C C33E02    	JMP	NEXT
+                
+                ;SCANX	MVI	A,-1		;hit end of line
+ 054F 3EFF      SCANX	MVI	A,0FFH		;DA hit end of line
+ 0551 325704    	STA	CONBUF+2	;mark buffer empty
+ 0554 210000    	LXI	H,0		;return a zero
+ 0557 E5        	PUSH	H
+ 0558 C33E02    	JMP	NEXT
+                
+                ; CONBXA - convert binary to ascii
+                ; ENTRY: TOP - 16 bit positive integer
+                ; EXIT:  TOP - address of converted ASCII string
+                ; DESCRIPTION: pushes the digits of the number
+                ; on to the stack, least significant digits first.
+                ; Then pops them up and stores them in a local
+                ; buffer.
+                
+ 055B 4E02      CONBXA	DW	TCALL		;threaded code
+ 055D 4B03E402  	DW	NEGONE,SWAP	;mark end of string with -1	
+ 0561 CE020A00E6CONB1	DW	TPUSH,10,DIV	;divide number by ten
+ 0567 E402      	DW	SWAP		;put quotient on top
+ 0569 EC02      	DW	DUP
+ 056B 1F036005  	DW	IFNZ,CONB1-1	;continue until Q = 0
+                	
+ 056F DE02      	DW	TPOP		;then drop quotient,
+ 0571 4303      	DW	ZERO		;store zero in first
+ 0573 A305BC02  	DW	NBUFR,POKEB	;byte of buffer,
+                				;and store string
+ 0577 EC024B03  CONB2	DW	DUP,NEGONE	;test for end of string
+ 057B 2A039C05  	DW	IFEQ,CONB3-1	;if yes
+ 057F A305A802  	DW	NBUFR,PEEKB	;else, increment byte count
+ 0583 7502      	DW	INC
+ 0585 A305BC02  	DW	NBUFR,POKEB
+ 0589 CE02300085	DW	TPUSH,'0',TADD	;convert digit to ascii
+                				;and store in next location
+ 058F A305      	DW	NBUFR
+ 0591 A305A80285	DW	NBUFR,PEEKB,TADD
+ 0597 BC02      	DW	POKEB
+ 0599 FC027605  	DW	JUMP,CONB2-1	;repeat
+                
+ 059D DE02      CONB3	DW	TPOP		;drop end of string marker
+ 059F A305      	DW	NBUFR		;push return buffer address
+ 05A1 6202      	DW	TRET		;and return
+                	
+ 05A3 5303      NBUFR	DW	VARIABLE	;threaded variable
+ 05A5           	DS	10		;plenty long enough
+                
+                ; CONAXB - convert ASCII decimal string to binary
+                ; Entry: TOP   - pointer to string
+                ; Exit:  TOP   - -1 if converted to binary
+                ; 		  0 if not 
+                ;	 TOP-1 - value of number if converted
+                ;		 ptr to string if not
+                ; DESCRIPTION: converts only positive, unsigned
+                ; integers. Written in assembly because I had it around
+                ; and didn't want to rewrite it in threaded code. 
+                
+ 05AF B105      CONAXB	DW	$+2	;CODE
+ 05B1 D1        	POP	D	;get string pointer
+ 05B2 D5        	PUSH	D	;but leave on stack
+ 05B3 1A        	LDAX	D	;get byte count
+ 05B4 47        	MOV	B,A
+ 05B5 210000    	LXI	H,0	;starting value
+                	
+ 05B8 13        CONA1	INX	D
+ 05B9 1A        	LDAX	D	;get next character
+ 05BA FE30      	CPI	'0'	;test for digit
+ 05BC DADF05    	JC	CONAX	;if not
+ 05BF FE3A      	CPI	'9'+1
+ 05C1 D2DF05    	JNC	CONAX	;if not
+ 05C4 D630      	SUI	'0'	;convert to binary
+ 05C6 D5        	PUSH	D	;save pointer
+ 05C7 29        	DAD	H	;multiply current value by 10
+ 05C8 E5        	PUSH	H
+ 05C9 29        	DAD	H
+ 05CA 29        	DAD	H
+ 05CB D1        	POP	D
+ 05CC 19        	DAD	D
+ 05CD 5F        	MOV	E,A	;add new binary digi
+ 05CE 1600      	MVI	D,0
+ 05D0 19        	DAD	D
+ 05D1 D1        	POP	D	;restore pointer
+ 05D2 05        	DCR	B	;dec count
+ 05D3 C2B805    	JNZ	CONA1	;continue until done
+ 05D6 D1        	POP	D	;then drop pointer,
+ 05D7 E5        	PUSH	H	;push number
+ 05D8 21FFFF    	LXI	H,-1	;and -1
+ 05DB E5        	PUSH	H
+ 05DC C33E02    	JMP	NEXT
+                
+ 05DF 210000    CONAX	LXI	H,0	;failure: push a zero
+ 05E2 E5        	PUSH	H
+ 05E3 C33E02    	JMP	NEXT
+                	
+                ; DIV - 16 bit divide
+                ; ENTRY: TOP   - divisor
+                ;	 TOP-1 - dividend
+                ; EXIT:	 TOP   - remainder
+                ;	 TOP-1 - quotient
+                ; DESCRIPTION: performs a 32 bit by 16 bit division for
+                ; positive integers only. The quotient must be resolved
+                ; in 16 bits.
+                
+ 05E6 E805      DIV	DW	$+2	;CODE
+ 05E8 C1        	POP	B	;BC <- divisor
+ 05E9 D1        	POP	D	;HLDE <- dividend
+ 05EA 210000    	LXI	H,0
+ 05ED CDF505    	CALL	DIV1	;do division
+ 05F0 D5        	PUSH	D	;push quotient
+ 05F1 E5        	PUSH	H	;push remainder
+ 05F2 C33E02    	JMP	NEXT
+                	
+ 05F5 0B        DIV1	DCX	B	;negate BC
+ 05F6 78        	MOV	A,B
+ 05F7 2F        	CMA
+ 05F8 47        	MOV	B,A
+ 05F9 79        	MOV	A,C
+ 05FA 2F        	CMA
+ 05FB 4F        	MOV	C,A
+ 05FC 3E10      	MVI	A,16D	;iteration count
+ 05FE 29        DIV2	DAD	H	;shift HLDE
+ 05FF F5        	PUSH	PSW	;save overflow
+ 0600 EB        	XCHG
+ 0601 29        	DAD	H
+ 0602 EB        	XCHG
+ 0603 D20706    	JNC	DIV3
+ 0606 2C        	INR	L
+ 0607 F1        DIV3	POP	PSW	;get overflow
+ 0608 DA1A06    	JC	DIV5	;if overflow, force subtraction
+ 060B E5        	PUSH	H	;else,save dividend
+                	
+ 060C 09        	DAD	B	;attempt subtraction
+ 060D DA1406    	JC	DIV4	;if it goes
+ 0610 E1        	POP	H	;else restore dividend
+ 0611 C31C06    	JMP	DIV6
+ 0614 1C        DIV4	INR	E	;increment quotient
+ 0615 33        	INX	SP	;drop old dividend
+ 0616 33        	INX	SP
+ 0617 C31C06    	JMP	DIV6
+ 061A 09        DIV5	DAD	B	;force subtraction
+ 061B 1C        	INR	E	;inc quotient
+ 061C 3D        DIV6	DCR	A	;decrement count
+ 061D C2FE05    	JNZ	DIV2	;repeat until done
+ 0620 C9        	RET
+                
+                ; The Names in the dictionary
+                ; Notice that the actual printed names are chosen for typing
+                ; convenience and do not necessarily match the internal names
+                ; which must conform to the assembler's rules. Also, not all
+                ; functions have been included here.
+                
+ 0621 =         NAMEBEG	EQU	$
+ 0621 012B       DB	1,'+'
+ 0623 8502       DW		TADD
+ 0625 012D       DB	1,'-'
+ 0627 A002       DW		TSUB
+ 0629 042F4D4F44 DB	4,'/MOD'
+ 062E E605       DW		DIV
+ 0630 0745584543 DB	7,'EXECUTE'
+ 0638 F503       DW		EXECUTE
+ 063A 05434C4541 DB	5,'CLEAR'
+ 0640 F402       DW		CLEAR
+ 0642 054D415443 DB	5,'MATCH'
+ 0648 D003       DW		MATCH
+ 064A 064C4F4F4B DB	6,'LOOKUP'
+ 0651 9603       DW		LOOKUP
+ 0653 0445584543 DB	4,'EXEC'
+ 0658 2001       DW		EXEC
+ 065A 064D454D4F DB	6,'MEMORY'
+ 0661 4F03       DW		MEMORY
+ 0663 06434F4E42 DB	6,'CONBXA'
+ 066A 5B05       DW		CONBXA
+ 066C 03494E43   DB	3,'INC'
+ 0670 7502       DW		INC
+ 0672 03444543   DB	3,'DEC'
+ 0676 7D02       DW		DEC
+ 0678 054D494E55 DB	5,'MINUS'
+ 067E 8E02       DW		MINUS
+ 0680 055045454B DB	5,'PEEKW'
+ 0686 B202       DW		PEEKW
+ 0688 055045454B DB	5,'PEEKB'
+ 068E A802       DW		PEEKB
+ 0690 05504F4B45 DB	5,'POKEW'
+ 0696 C402       DW		POKEW
+ 0698 05504F4B45 DB	5,'POKEB'
+ 069E BC02       DW		POKEB
+ 06A0 03504F50   DB	3,'POP'
+ 06A4 DE02       DW		TPOP
+ 06A6 0453574150 DB	4,'SWAP'
+ 06AB E402       DW 		SWAP
+ 06AD 03445550   DB	3,'DUP'
+ 06B1 EC02       DW		DUP
+ 06B3 0546495253 DB	5,'FIRST'
+ 06B9 E804       DW		FIRST
+ 06BB 00         DB	0		;end of dictionary
+ 06BB =         NAMEEND EQU	$-1
+                
+ 009B =         DICSIZE EQU	NAMEEND-NAMEBEG+1	;dictionary size in bytes
+                
+                ; Initialization Code
+                ; Execcuted on startup of system but eventually overwritten by
+                ; the expanding dictionary
+                
+                ; DICMOVE - moves the dictionary names
+                ; 	    to the top of available memory
+                
+ 06BC 2A5103    DICMOVE	LHLD	MEMORY+2	;DE <- top of memory
+ 06BF EB        	XCHG
+ 06C0 21BB06    	LXI	H,NAMEEND	;HL <- source (end of names)
+ 06C3 019B00    	LXI	B,DICSIZE	;BC <- byte count
+                				;transfer loop
+ 06C6 7E        DIC1	MOV	A,M		;get next byte
+ 06C7 12        	STAX	D		;move it
+ 06C8 2B        	DCX	H		;dec source pointer
+ 06C9 1B        	DCX	D		;dec target pointer
+ 06CA 0B        	DCX	B		;dec count
+ 06CB 78        	MOV	A,B		;test for zero
+ 06CC B1        	ORA	C
+ 06CD C2C606    	JNZ	DIC1		;not yet
+                
+ 06D0 EB        	XCHG			;set dictionary variable
+ 06D1 23        	INX	H
+ 06D2 22CE03    	SHLD	NAMES+2
+                
+ 06D5 C9        	RET			;DA
+ 06D6           	END	ENTRY
